@@ -23,10 +23,9 @@ def encrypt_image(image_path, key):
     image_data, size = image_to_bytes(image_path)
     cipher = Blowfish.new(key, Blowfish.MODE_CBC)
 
-    # Simulate encryption process
     print("Encrypting the image data...")
     padded_data = pad(image_data, BLOCK_SIZE)
-    time.sleep(1)  # Simulate delay for realistic transition
+    time.sleep(1)
     encrypted_data = cipher.iv + cipher.encrypt(padded_data)
     print("Encryption completed.")
     return encrypted_data, size
@@ -34,18 +33,15 @@ def encrypt_image(image_path, key):
 
 def save_as_visual_encrypted_image(encrypted_data, size, output_path):
     """Save the encrypted data as an image to visualize it."""
-    # Remove the IV (initialization vector) to keep only encrypted pixels
+
     encrypted_pixels = encrypted_data[BLOCK_SIZE:]
 
-    # Ensure we have enough data for the size
-    expected_bytes = size[0] * size[1] * 3  # RGB image
+    expected_bytes = size[0] * size[1] * 3
     encrypted_pixels = encrypted_pixels[:expected_bytes]
 
-    # Convert to a NumPy array and reshape to the image size
     encrypted_array = np.frombuffer(encrypted_pixels, dtype=np.uint8)
     encrypted_image = encrypted_array.reshape((size[1], size[0], 3))
 
-    # Save the encrypted image
     encrypted_img = Image.fromarray(encrypted_image, "RGB")
     encrypted_img.save(output_path)
 
@@ -99,23 +95,19 @@ def client():
 
     encrypted_data, size = encrypt_image(image_path, key)
 
-    # Save encrypted image for debug purposes
     encrypted_image_path = "output_images/encrypted_image.jpg"
     with open(encrypted_image_path, "wb") as f:
         f.write(encrypted_data)
 
-    # Save a visual representation of the encrypted image
     visual_encrypted_path = "output_images/visual_encrypted_image.bmp"
     save_as_visual_encrypted_image(encrypted_data, size, visual_encrypted_path)
 
-    # Compute checksum of encrypted data
     checksum = hashlib.md5(encrypted_data).hexdigest()
 
     client_socket.send(f"{size[0]},{size[1]}".encode())
 
     client_socket.send(checksum.encode())
 
-    # Sending encrypted image to the server with tqdm progress bar
     print("Sending encrypted image to the server...")
     total_size = len(encrypted_data)
     with tqdm(

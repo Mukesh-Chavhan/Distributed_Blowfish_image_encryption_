@@ -23,7 +23,7 @@ def bytes_to_image(byte_data, size, output_path):
 def save_as_visual_encrypted_image(encrypted_data, size, output_path):
     """Save the encrypted data as a visual image."""
     encrypted_pixels = encrypted_data[BLOCK_SIZE:]
-    expected_bytes = size[0] * size[1] * 3  # RGB image
+    expected_bytes = size[0] * size[1] * 3
     encrypted_pixels = encrypted_pixels[:expected_bytes]
 
     encrypted_array = np.frombuffer(encrypted_pixels, dtype=np.uint8)
@@ -42,7 +42,7 @@ def decrypt_image(encrypted_data, key, size, decrypted_image_path):
 
     try:
         print("Decrypting image...")
-        dynamic_progress_bar("Decrypting", duration=5)  # Progress bar during decryption
+        dynamic_progress_bar("Decrypting", duration=5)
         decrypted_data = unpad(cipher.decrypt(encrypted_image_data), BLOCK_SIZE)
         bytes_to_image(decrypted_data, size, decrypted_image_path)
         print(f"Decrypted image saved to {decrypted_image_path}")
@@ -83,39 +83,32 @@ def server():
     client_socket, addr = server_socket.accept()
     print(f"Connection established with {addr}")
 
-    # Step 1: Receive image size
     size_data = client_socket.recv(1024).decode()
     size = tuple(map(int, size_data.split(",")))
 
-    # Step 2: Receive checksum
     checksum = client_socket.recv(32).decode()
 
-    # Step 3: Receive encrypted data
     encrypted_data = b""
     buffer_size = 8192
     print("Receiving encrypted image data...")
-    for i in range(5):  # Simulating dynamic progress for receiving
+    for i in range(5):
         dynamic_progress_bar("Receiving Data", duration=5)
     while chunk := client_socket.recv(buffer_size):
         encrypted_data += chunk
 
-    # Save received encrypted image
     encrypted_image_path = "received_encrypted_image.jpg"
     with open(encrypted_image_path, "wb") as f:
         f.write(encrypted_data)
 
-    # Verify checksum
     computed_checksum = hashlib.md5(encrypted_data).hexdigest()
     if checksum != computed_checksum:
         print("Error: Checksum mismatch. Data integrity compromised.")
         client_socket.close()
         return
 
-    # Step 4: Save visual representation
     visual_encrypted_path = "visual_received_encrypted_image.bmp"
     save_as_visual_encrypted_image(encrypted_data, size, visual_encrypted_path)
 
-    # Step 5: Decrypt image
     key = input("Enter the decryption key: ").encode()
     decrypted_image_path = "decrypted_image.jpg"
 
