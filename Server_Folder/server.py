@@ -2,6 +2,8 @@ import socket
 from Crypto.Cipher import Blowfish
 from Crypto.Util.Padding import unpad
 from PIL import Image
+import hashlib
+import numpy as np
 import os
 import time
 import sys
@@ -10,40 +12,50 @@ BLOCK_SIZE = Blowfish.block_size
 
 
 def bytes_to_image(byte_data, size, output_path):
-    """Convert bytes to an image and save it in a specified format."""
+    """Convert bytes to an image and save it."""
     try:
         img = Image.frombytes("RGB", size, byte_data)
         img.save(output_path, format="JPEG")
     except Exception as e:
-        print("Error converting bytes to image:", e)
+        print(f"Error converting bytes to image: {e}")
 
 
-def decrypt_image_stream(encrypted_data, key, size, decrypted_image_path):
-    """Decrypt the image in a stream and save it directly to disk."""
-    print(f"Starting decryption process...")
+def save_as_visual_encrypted_image(encrypted_data, size, output_path):
+    """Save the encrypted data as a visual image."""
+    encrypted_pixels = encrypted_data[BLOCK_SIZE:]
+    expected_bytes = size[0] * size[1] * 3  # RGB image
+    encrypted_pixels = encrypted_pixels[:expected_bytes]
 
+    encrypted_array = np.frombuffer(encrypted_pixels, dtype=np.uint8)
+    encrypted_image = encrypted_array.reshape((size[1], size[0], 3))
+
+    encrypted_img = Image.fromarray(encrypted_image, "RGB")
+    encrypted_img.save(output_path)
+
+
+def decrypt_image(encrypted_data, key, size, decrypted_image_path):
+    """Decrypt the image and save it."""
     iv = encrypted_data[:BLOCK_SIZE]
     encrypted_image_data = encrypted_data[BLOCK_SIZE:]
 
     cipher = Blowfish.new(key, Blowfish.MODE_CBC, iv=iv)
 
     try:
-
+        print("Decrypting image...")
+        dynamic_progress_bar("Decrypting", duration=5)  # Progress bar during decryption
         decrypted_data = unpad(cipher.decrypt(encrypted_image_data), BLOCK_SIZE)
-
         bytes_to_image(decrypted_data, size, decrypted_image_path)
         print(f"Decrypted image saved to {decrypted_image_path}")
-    except ValueError as e:
-        print("Error: Incorrect decryption key or corrupt data. Please try again.")
-        return False
+        return True
+    except ValueError:
+        print("Error: Incorrect decryption key or corrupt data.")
     except Exception as e:
-        print("Unexpected error during decryption:", e)
-        return False
-    return True
+        print(f"Unexpected error during decryption: {e}")
+    return False
 
 
-def dynamic_progress_bar(task, duration=5, stop_at_error=False):
-    """Display a progress bar with percentage and estimated time."""
+def dynamic_progress_bar(task, duration=5):
+    """Display a dynamic progress bar."""
     start_time = time.time()
     for i in range(1, duration + 1):
         percent = (i / duration) * 100
@@ -55,27 +67,6 @@ def dynamic_progress_bar(task, duration=5, stop_at_error=False):
         )
         sys.stdout.flush()
         time.sleep(0.2)
-
-        if stop_at_error and i == duration:
-            sys.stdout.write(f"\r{task}: Decryption failed! Please check the key.\n")
-            sys.stdout.flush()
-            return False
-    print("\n")
-    return True
-
-
-def loading_messages(task):
-    """Simulate different stages of the process."""
-    stages = [
-        f"{task}: Initializing decryption...",
-        f"{task}: Decrypting image...",
-        f"{task}: Finalizing...",
-        f"{task}: Done!",
-    ]
-    for stage in stages:
-        sys.stdout.write(f"\r{stage}")
-        sys.stdout.flush()
-        time.sleep(0.5)
     print("\n")
 
 
@@ -92,26 +83,46 @@ def server():
     client_socket, addr = server_socket.accept()
     print(f"Connection established with {addr}")
 
+    # Step 1: Receive image size
     size_data = client_socket.recv(1024).decode()
     size = tuple(map(int, size_data.split(",")))
 
+    # Step 2: Receive checksum
+    checksum = client_socket.recv(32).decode()
+
+    # Step 3: Receive encrypted data
     encrypted_data = b""
-    print("Receiving encrypted image data...")
-    if not dynamic_progress_bar("Receiving data", duration=10):
-        return
-
     buffer_size = 8192
-    while True:
-        data = client_socket.recv(buffer_size)
-        if not data:
-            break
-        encrypted_data += data
+    print("Receiving encrypted image data...")
+    for i in range(5):  # Simulating dynamic progress for receiving
+        dynamic_progress_bar("Receiving Data", duration=5)
+    while chunk := client_socket.recv(buffer_size):
+        encrypted_data += chunk
 
-    key = input("Enter the decryption key: ").encode()
+    # Save received encrypted image
+    encrypted_image_path = "received_encrypted_image.jpg"
+    with open(encrypted_image_path, "wb") as f:
+        f.write(encrypted_data)
 
-    decrypted_image_path = "decrypted_image.jpg"
-    if not decrypt_image_stream(encrypted_data, key, size, decrypted_image_path):
+    # Verify checksum
+    computed_checksum = hashlib.md5(encrypted_data).hexdigest()
+    if checksum != computed_checksum:
+        print("Error: Checksum mismatch. Data integrity compromised.")
+        client_socket.close()
         return
+
+    # Step 4: Save visual representation
+    visual_encrypted_path = "visual_received_encrypted_image.bmp"
+    save_as_visual_encrypted_image(encrypted_data, size, visual_encrypted_path)
+
+    # Step 5: Decrypt image
+    key = input("Enter the decryption key: ").encode()
+    decrypted_image_path = "decrypted_image.jpg"
+
+    if decrypt_image(encrypted_data, key, size, decrypted_image_path):
+        print("Decryption completed successfully.")
+    else:
+        print("Decryption failed. Please check the key or data.")
 
     client_socket.close()
 
